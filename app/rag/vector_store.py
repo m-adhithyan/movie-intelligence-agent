@@ -74,6 +74,7 @@ class VectorStore:
         self,
         query: str,
         n_results: int = 5,
+        where: dict | None = None,
     ):
         query_embedding = self.embedding_model.embed_query(
             query
@@ -82,4 +83,5 @@ class VectorStore:
         return self.collection.query(
             query_embeddings=[query_embedding],
             n_results=n_results,
+            where=where,
         )
