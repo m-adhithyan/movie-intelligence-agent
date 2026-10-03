@@ -1,6 +1,5 @@
-import asyncio
-
 from mcp import Client
+
 from app.mcp.email_server import mcp
 from app.agent.router import AgentRouter
 from app.agent.ambiguity import AmbiguityHandler
@@ -40,22 +39,45 @@ class MovieAgent:
                 "result": result,
             }
 
-    async def run(self, user_request: str, movie_title: str | None = None) -> dict:
+    async def run(
+        self,
+        user_request: str,
+        movie_title: str | None = None,
+        movie_titles: list[str] | None = None,
+    ) -> dict:
         """
         Process a user request end-to-end.
 
         Supports three intent paths:
-          - informational  → RAG retrieval + LLM answer + citations
-          - email          → RAG + LLM + MCP email tool
-          - clarification  → ask the user for more information
+          - informational → RAG retrieval + LLM answer + citations
+          - email → RAG + LLM + MCP email tool
+          - clarification → ask the user for more information
                              (no RAG, no email)
 
         Args:
-            user_request: The raw text from the user.
-            movie_title:  Optional movie filter (e.g. set by the UI
-                          movie selector). When supplied, ambiguity
-                          checking is skipped.
+            user_request:
+                The raw text from the user.
+
+            movie_title:
+                Optional single movie filter for backward compatibility.
+
+            movie_titles:
+                Optional list of movie filters selected by the UI.
+                When supplied, retrieval is restricted to these movies
+                and cross-movie ambiguity is automatically suppressed.
         """
+
+        # ----------------------------------------------------------
+        # 0. Normalize movie filters
+        # ----------------------------------------------------------
+        # Preserve backward compatibility with callers that still
+        # provide a single movie_title.
+        if movie_titles is None and movie_title is not None:
+            movie_titles = [movie_title]
+
+        # Treat an empty movie selection as no explicit filter.
+        if movie_titles is not None and len(movie_titles) == 0:
+            movie_titles = None
 
         # ----------------------------------------------------------
         # 1. Route the request
@@ -73,20 +95,24 @@ class MovieAgent:
             }
 
         # ----------------------------------------------------------
-        # 3. Retrieve context from the vector store
+        # 3. Retrieve context from the vector store (NO LLM yet)
         # ----------------------------------------------------------
-        # Both informational and email paths need RAG.
-        rag_result = self.answerer.answer(
+        # Both informational and email paths use RAG retrieval.
+        # We deliberately stop here before calling the LLM so that
+        # we can inspect the sources and check for ambiguity first.
+        sources = self.answerer.retrieve(
             question=route["query"],
-            movie_title=movie_title,
+            movie_titles=movie_titles,
         )
 
         # ----------------------------------------------------------
-        # 4. Ambiguity check (skip when user already chose a movie)
+        # 4. Ambiguity check (BEFORE LLM generation)
         # ----------------------------------------------------------
+        # If the caller explicitly selected one or more movies,
+        # movie_titles is non-None and ambiguity is suppressed.
         ambiguity = self.ambiguity_handler.check(
-            sources=rag_result.get("sources", []),
-            movie_title=movie_title,
+            sources=sources,
+            movie_titles=movie_titles,
         )
 
         if ambiguity.is_ambiguous:
@@ -97,7 +123,15 @@ class MovieAgent:
             }
 
         # ----------------------------------------------------------
-        # 5. Informational path
+        # 5. LLM generation (only reached when NOT ambiguous)
+        # ----------------------------------------------------------
+        rag_result = self.answerer.generate(
+            question=route["query"],
+            sources=sources,
+        )
+
+        # ----------------------------------------------------------
+        # 6. Informational path
         # ----------------------------------------------------------
         if route["intent"] == "informational":
             return {
@@ -108,7 +142,7 @@ class MovieAgent:
             }
 
         # ----------------------------------------------------------
-        # 6. Email path
+        # 7. Email path
         # ----------------------------------------------------------
         answer = rag_result["answer"]
 
@@ -128,6 +162,9 @@ class MovieAgent:
 
         email_body = f"{answer}\n\nSources:\n"
 
+        # Only include sources that were actually cited by the LLM.
+        # This prevents unrelated retrieved chunks from appearing
+        # in the email.
         sources_by_chunk_id = {
             source["chunk_id"]: source
             for source in rag_result.get("sources", [])
@@ -145,12 +182,18 @@ class MovieAgent:
                 f"{source['end_time']}\n"
             )
 
+        # ----------------------------------------------------------
+        # 8. Dispatch email through MCP
+        # ----------------------------------------------------------
         email_result = await self.send_email(
             recipient=route["recipient"],
             subject=email_subject,
             body=email_body,
         )
 
+        # ----------------------------------------------------------
+        # 9. Return complete result
+        # ----------------------------------------------------------
         return {
             "intent": "email",
             "answer": answer,

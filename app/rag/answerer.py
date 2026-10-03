@@ -44,14 +44,23 @@ class RAGAnswerer:
         else:
             self.reranker = None
 
-    def answer(
+    # ------------------------------------------------------------------
+    # Public: step 1 – retrieve and rerank (no LLM call)
+    # ------------------------------------------------------------------
+
+    def retrieve(
         self,
         question: str,
         movie_title: str | None = None,
         movie_titles: list[str] | None = None,
         n_results: int = 5,
-    ) -> dict:
+    ) -> list[dict]:
+        """Return reranked sources for *question* without calling the LLM.
 
+        This is the first half of the former monolithic `answer()` method.
+        Callers can inspect the sources (e.g. for ambiguity detection)
+        before deciding whether to proceed to generation.
+        """
         if not question.strip():
             raise ValueError("Question cannot be empty.")
 
@@ -68,6 +77,32 @@ class RAGAnswerer:
             movie_titles=movie_titles,
         )
 
+        # Optional semantic reranking.
+        if sources and self.use_reranker and self.reranker is not None:
+            sources = self.reranker.rerank(
+                query=question,
+                results=sources,
+                top_k=n_results,
+            )
+
+        return sources
+
+    # ------------------------------------------------------------------
+    # Public: step 2 – generate an LLM answer given pre-fetched sources
+    # ------------------------------------------------------------------
+
+    def generate(
+        self,
+        question: str,
+        sources: list[dict],
+    ) -> dict:
+        """Generate an LLM answer from *sources* that were already retrieved.
+
+        This is the second half of the former monolithic `answer()` method.
+        Separating it from `retrieve()` allows the caller to run checks
+        (e.g. ambiguity detection) between the two steps.
+        """
+
         if not sources:
             return {
                 "answer": (
@@ -77,14 +112,6 @@ class RAGAnswerer:
                 "citations": [],
                 "sources": [],
             }
-
-        # Optional semantic reranking.
-        if self.use_reranker and self.reranker is not None:
-            sources = self.reranker.rerank(
-                query=question,
-                results=sources,
-                top_k=n_results,
-            )
 
         context_parts = []
 
@@ -157,3 +184,27 @@ Answer:
             "sources": sources,
             "invalid_source_numbers": invalid_source_numbers,
         }
+
+    # ------------------------------------------------------------------
+    # Public: convenience wrapper (backward-compatible)
+    # ------------------------------------------------------------------
+
+    def answer(
+        self,
+        question: str,
+        movie_title: str | None = None,
+        movie_titles: list[str] | None = None,
+        n_results: int = 5,
+    ) -> dict:
+        """Full retrieve-then-generate pipeline in one call.
+
+        Kept for backward compatibility with code that does not need to
+        inspect sources before generation.
+        """
+        sources = self.retrieve(
+            question=question,
+            movie_title=movie_title,
+            movie_titles=movie_titles,
+            n_results=n_results,
+        )
+        return self.generate(question=question, sources=sources)
