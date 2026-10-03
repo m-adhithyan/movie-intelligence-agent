@@ -128,7 +128,17 @@ class MovieAgent:
 
         email_body = f"{answer}\n\nSources:\n"
 
-        for source in rag_result.get("sources", []):
+        sources_by_chunk_id = {
+            source["chunk_id"]: source
+            for source in rag_result.get("sources", [])
+        }
+
+        for citation in rag_result.get("citations", []):
+            source = sources_by_chunk_id.get(citation["chunk_id"])
+
+            if source is None:
+                continue
+
             email_body += (
                 f"- {source['movie_title']} | "
                 f"{source['start_time']} --> "
