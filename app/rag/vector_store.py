@@ -52,10 +52,15 @@ class VectorStore:
         metadatas = [
             {
                 "movie_title": chunk.movie_title,
+                "movie_id": chunk.movie_id,
                 "start_time": chunk.start_time,
                 "end_time": chunk.end_time,
                 "start_seconds": chunk.start_seconds,
                 "end_seconds": chunk.end_seconds,
+                "subtitle_indices": ",".join(
+                    str(index)
+                    for index in chunk.subtitle_indices
+                ),
             }
             for chunk in chunks
         ]

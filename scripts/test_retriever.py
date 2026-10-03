@@ -118,3 +118,35 @@ for result in results_filtered:
 print("\n" + "=" * 70)
 print("ALL RETRIEVER TESTS PASSED")
 print("=" * 70)
+
+# New metadata validation
+for result in results_filtered:
+    assert result["movie_id"]
+    assert result["subtitle_indices"]
+
+
+# Results must be ordered from most similar
+# to least similar.
+distances = [
+    result["distance"]
+    for result in results_filtered
+]
+
+assert distances == sorted(distances), (
+    "Retriever results are not ordered "
+    "by similarity."
+)
+
+
+# Chunk IDs must be unique.
+chunk_ids = [
+    result["chunk_id"]
+    for result in results_filtered
+]
+
+assert len(chunk_ids) == len(
+    set(chunk_ids)
+), "Duplicate chunks returned."
+
+
+print("\nRetrieval metadata validation: PASSED")

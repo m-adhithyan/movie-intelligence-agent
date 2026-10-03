@@ -22,6 +22,7 @@ chunks = create_chunks(
 )
 
 print(f"Movie: {entries[0].movie_title}")
+print(f"Movie ID: {entries[0].movie_id}")
 print(f"Subtitle entries: {len(entries)}")
 print(f"Chunks: {len(chunks)}")
 
@@ -58,7 +59,9 @@ results = store.search(
 
 print("\nTop results:\n")
 
-for i in range(3):
+for i in range(
+    len(results["documents"][0])
+):
 
     document = results["documents"][0][i]
     metadata = results["metadatas"][0][i]
@@ -71,9 +74,19 @@ for i in range(3):
     )
 
     print(
+        f"Movie ID: "
+        f"{metadata.get('movie_id')}"
+    )
+
+    print(
         f"Time: "
         f"{metadata['start_time']} --> "
         f"{metadata['end_time']}"
+    )
+
+    print(
+        f"Subtitle IDs: "
+        f"{metadata.get('subtitle_indices')}"
     )
 
     print(
@@ -96,14 +109,27 @@ assert store.count() >= len(chunks), (
 assert "documents" in results
 assert "metadatas" in results
 assert "distances" in results
+assert "ids" in results
 
 assert len(results["documents"][0]) == 3
 
 for metadata in results["metadatas"][0]:
 
     assert metadata["movie_title"]
+    assert metadata["movie_id"]
     assert metadata["start_time"]
     assert metadata["end_time"]
+    assert "subtitle_indices" in metadata
+
+
+# Verify the retrieved movie is the requested movie.
+for metadata in results["metadatas"][0]:
+
+    assert (
+        metadata["movie_id"]
+        == entries[0].movie_id
+    )
+
 
 print("\n" + "=" * 70)
 print("ALL VECTOR STORE TESTS PASSED")
