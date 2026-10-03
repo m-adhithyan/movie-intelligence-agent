@@ -167,12 +167,33 @@ class AgentRouter:
         # 5. Valid email request — build a clean query for RAG
         # ---------------------------------------------------------
         query = EMAIL_PATTERN.sub(" ", request)
+
         query = re.sub(
             r"\b(email|e-mail|send|mail|dispatch)\b",
             " ",
             query,
             flags=re.IGNORECASE,
         )
+
+        query = re.sub(r"\s+", " ", query).strip()
+
+        # Remove common action/request filler from the beginning.
+        query = re.sub(
+            r"^(me|please|can you|could you|would you|will you)\s+",
+            "",
+            query,
+            flags=re.IGNORECASE,
+        )
+
+        # Remove dangling prepositions/conjunctions left by the
+        # removed recipient, e.g. "... sculpture to".
+        query = re.sub(
+            r"\s+\b(to|for|from)\s*$",
+            "",
+            query,
+            flags=re.IGNORECASE,
+        )
+
         query = re.sub(r"\s+", " ", query).strip()
 
         return {
