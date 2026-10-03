@@ -19,6 +19,7 @@ class Retriever:
         query: str,
         n_results: int = 5,
         movie_title: str | None = None,
+        movie_titles: list[str] | None = None,
     ) -> list[dict]:
 
         if not query.strip():
@@ -31,16 +32,31 @@ class Retriever:
                 "n_results must be greater than 0."
             )
 
+        # ---------------------------------------------------------------
+        # Movie filtering
+        # ---------------------------------------------------------------
+
         where = None
 
-        if movie_title:
+        if movie_titles:
+            # Multiple movies:
+            # ChromaDB requires an operator expression for a list.
+            where = {
+                "movie_title": {
+                    "$in": movie_titles
+                }
+            }
+
+        elif movie_title:
+            # Backward-compatible single-movie filtering.
             where = {
                 "movie_title": movie_title
             }
 
-        # Retrieve extra candidates when filtering is enabled.
-        # This prevents weak matches from reducing the final
-        # result count unnecessarily.
+        # ---------------------------------------------------------------
+        # Retrieval
+        # ---------------------------------------------------------------
+
         candidate_count = n_results
 
         if self.min_distance is not None:

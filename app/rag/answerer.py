@@ -48,6 +48,7 @@ class RAGAnswerer:
         self,
         question: str,
         movie_title: str | None = None,
+        movie_titles: list[str] | None = None,
         n_results: int = 5,
     ) -> dict:
 
@@ -64,6 +65,7 @@ class RAGAnswerer:
             query=question,
             n_results=retrieval_count,
             movie_title=movie_title,
+            movie_titles=movie_titles,
         )
 
         if not sources:

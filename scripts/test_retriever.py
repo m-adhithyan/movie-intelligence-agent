@@ -150,3 +150,58 @@ assert len(chunk_ids) == len(
 
 
 print("\nRetrieval metadata validation: PASSED")
+
+# --------------------------------------------------
+# Test 3: Multi-movie filtered retrieval
+# --------------------------------------------------
+
+selected_movies = [
+    "A Bucket Of Blood 1959",
+    "A Farewell To Arms 1932",
+    "A Star Is Born 1937",
+]
+
+multi_results = retriever.retrieve(
+    query="What happens in the movie?",
+    n_results=5,
+    movie_titles=selected_movies,
+)
+
+print("\n" + "=" * 70)
+print("MULTI-MOVIE FILTERED RETRIEVAL")
+print("=" * 70)
+
+print("Selected movies:")
+
+for movie in selected_movies:
+    print(f"  - {movie}")
+
+print(f"Results: {len(multi_results)}")
+
+for result in multi_results:
+    print(
+        f"- {result['movie_title']} | "
+        f"{result['start_time']} --> "
+        f"{result['end_time']}"
+    )
+
+# Must return results
+assert multi_results, (
+    "Multi-movie retrieval returned no results."
+)
+
+# Every result must belong to one of the
+# selected movies.
+returned_movies = {
+    result["movie_title"]
+    for result in multi_results
+}
+
+assert returned_movies.issubset(
+    set(selected_movies)
+), (
+    "Retriever returned a movie outside "
+    f"the selected movies: {returned_movies}"
+)
+
+print("\nMulti-movie filtering: PASSED")
