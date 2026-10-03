@@ -1,0 +1,13 @@
+# Core RAG / embedding
+chromadb
+sentence-transformers
+
+# Subtitle parsing
+pysrt
+
+# LLM / MCP
+mcp
+python-dotenv
+
+# Web UI
+streamlit

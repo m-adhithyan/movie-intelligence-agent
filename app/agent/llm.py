@@ -12,9 +12,11 @@ class LocalLLM:
         self,
         model_name: str = MODEL_NAME,
         ollama_url: str = OLLAMA_URL,
+        max_retries: int = 3,
     ):
         self.model_name = model_name
         self.ollama_url = ollama_url
+        self.max_retries = max_retries
 
     def generate(
         self,
@@ -45,31 +47,42 @@ class LocalLLM:
             "stream": False,
         }
 
-        request = Request(
-            self.ollama_url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
+        for attempt in range(1, self.max_retries + 1):
+            request = Request(
+                self.ollama_url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
 
-        try:
-            with urlopen(request) as response:
-                data = json.loads(
-                    response.read().decode("utf-8")
-                )
+            try:
+                with urlopen(request, timeout=120) as response:
+                    data = json.loads(
+                        response.read().decode("utf-8")
+                    )
 
-        except URLError as exc:
-            raise RuntimeError(
-                "Could not connect to Ollama. "
-                "Make sure Ollama is running."
-            ) from exc
+            except URLError as exc:
+                raise RuntimeError(
+                    "Could not connect to Ollama. "
+                    "Make sure Ollama is running."
+                ) from exc
 
-        try:
-            return data["message"]["content"]
+            try:
+                content = data["message"]["content"]
+            except KeyError as exc:
+                raise RuntimeError(
+                    f"Unexpected Ollama response: {data}"
+                ) from exc
 
-        except KeyError as exc:
-            raise RuntimeError(
-                f"Unexpected Ollama response: {data}"
-            ) from exc
+            # The thinking model sometimes returns empty content
+            # on the first attempt. Retry if that happens.
+            if content and content.strip():
+                return content
+
+            if attempt < self.max_retries:
+                continue  # retry
+
+        # All retries exhausted — return whatever we have (may be empty)
+        return content
