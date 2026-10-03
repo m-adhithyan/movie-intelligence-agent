@@ -1,5 +1,6 @@
 from app.agent.llm import LocalLLM
 from app.rag.retriever import Retriever
+from app.rag.reranker import Reranker
 
 
 SYSTEM_PROMPT = """
@@ -29,9 +30,18 @@ class RAGAnswerer:
         self,
         retriever: Retriever | None = None,
         llm: LocalLLM | None = None,
+        reranker: Reranker | None = None,
+        use_reranker: bool = True,
     ):
         self.retriever = retriever or Retriever()
         self.llm = llm or LocalLLM()
+
+        self.use_reranker = use_reranker
+
+        if use_reranker:
+            self.reranker = reranker or Reranker()
+        else:
+            self.reranker = None
 
     def answer(
         self,
@@ -43,9 +53,15 @@ class RAGAnswerer:
         if not question.strip():
             raise ValueError("Question cannot be empty.")
 
+        # Retrieve a larger candidate set when reranking.
+        retrieval_count = n_results
+
+        if self.use_reranker:
+            retrieval_count = max(n_results * 2, 5)
+
         sources = self.retriever.retrieve(
             query=question,
-            n_results=n_results,
+            n_results=retrieval_count,
             movie_title=movie_title,
         )
 
@@ -58,6 +74,14 @@ class RAGAnswerer:
                 "citations": [],
                 "sources": [],
             }
+
+        # Optional semantic reranking.
+        if self.use_reranker and self.reranker is not None:
+            sources = self.reranker.rerank(
+                query=question,
+                results=sources,
+                top_k=n_results,
+            )
 
         context_parts = []
 
